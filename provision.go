@@ -34,7 +34,7 @@ func main() {
 		generateCA()
 	}
 
-	if *genServer != ""	{
+	if *genServer != "" {
 		generateServerCerts(*genServer)
 	}
 
@@ -161,7 +161,8 @@ func generateClientCerts(deviceName string) {
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			CommonName:    deviceName,
+			CommonName:   deviceName,
+			Organization: []string{"Company, INC."},
 		},
 		DNSNames:    []string{deviceName},
 		NotBefore:   time.Now(),
