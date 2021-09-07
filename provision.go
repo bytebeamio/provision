@@ -49,6 +49,10 @@ type Client struct {
 	Tenant string `arg:"required" help:"tenant name"`
 }
 
+func (Config) Version() string {
+	return "provision 1.0.0"
+}
+
 func main() {
 	c := Config{}
 	parser := arg.MustParse(&c)
