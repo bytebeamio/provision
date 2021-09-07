@@ -6,11 +6,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"flag"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"time"
+
+	"github.com/alexflint/go-arg"
 )
 
 // References
@@ -21,43 +23,69 @@ import (
 // https://gist.github.com/shaneutt/5e1995295cff6721c89a71d13a71c251
 // https://shaneutt.com/blog/golang-ca-and-signed-cert-go/
 
-var genCA *bool = flag.Bool("ca", false, "Generate fresh CA key and cert to sign server and client certificates. \nUsage: ./provision -ca")
-var genServer *string = flag.String("server", "", "Generate server certificate key pair. \nUsage: ./provision -server mqtt.bytebeam.io")
-var genClient *string = flag.String("client", "", "Generate client certificate key pair. \nUsage: ./provision -client device-1")
+type Config struct {
+	Ca     *Ca     `arg:"subcommand:ca" help:"generate ca certs [provision ca]"`
+	Server *Server `arg:"subcommand:server" help:"generate server certs [provision server --ca {ca cert} --domain {domain}]"`
+	Client *Client `arg:"subcommand:client" help:"generate client certs [provision client --ca {ca cert path} --cakey {ca key path} --device {device id} --tenant {tenant}]"`
+  Out    string  `arg:"-o" default:"./"`
+}
 
-func init() {
-	flag.Parse()
+type Ca struct {
+	Bits int `default:"4096" help:"Number of bits"`
+}
+
+type Server struct {
+	Bits   int    `default:"4096" help:"Number of bits"`
+	Ca     string `arg:"required" help:"ca cert path to sign server certificates"`
+	CaKey  string `arg:"required" help:"ca key path to sign server certificates"`
+	Domain string `arg:"required" help:"domain name"`
+}
+
+type Client struct {
+	Bits   int    `default:"4096" help:"Number of bits"`
+	Ca     string `arg:"required" help:"ca cert path to sign client certificates"`
+	CaKey  string `arg:"required" help:"ca key path to sign client certificates"`
+	Device string `arg:"required" help:"device name"`
+	Tenant string `arg:"required" help:"tenant name"`
 }
 
 func main() {
-	if *genCA {
-		generateCA()
+	c := Config{}
+	parser := arg.MustParse(&c)
+
+	if c.Ca == nil && c.Server == nil && c.Client == nil {
+		parser.WriteHelp(os.Stderr)
+		os.Exit(255)
 	}
 
-	if *genServer != ""	{
-		generateServerCerts(*genServer)
+	if c.Ca != nil {
+		generateCA(c.Ca.Bits, c.Out)
 	}
 
-	if *genClient != "" {
-		generateClientCerts(*genClient)
+	if c.Server != nil {
+		generateServerCerts(c.Server.Bits, c.Server.Ca, c.Server.CaKey, c.Server.Domain, c.Out)
+	}
+
+	if c.Client != nil {
+		generateClientCerts(c.Client.Bits, c.Client.Ca, c.Client.CaKey, c.Client.Device, c.Client.Tenant, c.Out)
 	}
 }
 
-func generateCA() {
+func generateCA(bits int, out string) {
 	// create our RSA private and public key
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	check(err)
 
 	// set up our CA certificate
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			Organization:  []string{"Company, INC."},
-			Country:       []string{"US"},
-			Province:      []string{""},
-			Locality:      []string{"San Francisco"},
-			StreetAddress: []string{"Golden Gate Bridge"},
-			PostalCode:    []string{"94016"},
+			Organization:  []string{"IOT Express Pvt Ltd"},
+			Country:       []string{"India"},
+			Province:      []string{"Karnataka"},
+			Locality:      []string{"Bangalore"},
+			StreetAddress: []string{"Subbiah Garden"},
+			PostalCode:    []string{"560011"},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
@@ -75,23 +103,27 @@ func generateCA() {
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: caCertDER, Type: "CERTIFICATE"})
 	caPrivateKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: caPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-	caKey, err := os.Create("./ca.key.pem")
+  caKeyFile := out + "ca.key.pem"
+	caKey, err := os.Create(caKeyFile)
 	check(err)
 	caKey.Write(caPrivateKeyPEM)
-	caCert, err := os.Create("./ca.cert.pem")
+
+  caCertFile := out + "ca.cert.pem"
+	caCert, err := os.Create(caCertFile)
 	check(err)
 	caCert.Write(caCertPEM)
+  fmt.Printf("%q\n", caCertPEM)
 }
 
-func generateServerCerts(domain string) {
-	caPrivateKeyPEM, err := ioutil.ReadFile("./ca.key.pem")
+func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out string) {
+	caPrivateKeyPEM, err := ioutil.ReadFile(caKeyPath)
 	check(err)
 
 	caKey, _ := pem.Decode([]byte(caPrivateKeyPEM))
 	caPrivateKey, err := x509.ParsePKCS1PrivateKey(caKey.Bytes)
 	check(err)
 
-	caCertPEM, err := ioutil.ReadFile("./ca.cert.pem")
+	caCertPEM, err := ioutil.ReadFile(caCertPath)
 	check(err)
 
 	caCertBytes, _ := pem.Decode([]byte(caCertPEM))
@@ -99,7 +131,7 @@ func generateServerCerts(domain string) {
 	check(err)
 
 	// create our RSA private and public key
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	check(err)
 
 	// set up our CA certificate
@@ -107,12 +139,12 @@ func generateServerCerts(domain string) {
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
 			CommonName:    domain,
-			Organization:  []string{"Company, INC."},
-			Country:       []string{"US"},
-			Province:      []string{""},
-			Locality:      []string{"San Francisco"},
-			StreetAddress: []string{"Golden Gate Bridge"},
-			PostalCode:    []string{"94016"},
+			Organization:  []string{"Bytebeam.io"},
+			Country:       []string{"India"},
+			Province:      []string{"Karnataka"},
+			Locality:      []string{"Bangalore"},
+			StreetAddress: []string{"Subbiah Garden"},
+			PostalCode:    []string{"560011"},
 		},
 		DNSNames:    []string{domain},
 		NotBefore:   time.Now(),
@@ -128,25 +160,29 @@ func generateServerCerts(domain string) {
 
 	// pem encode
 	serverCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverCertDER, Type: "CERTIFICATE"})
-	serverPrivateKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
+	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-	serverKey, err := os.Create(domain + ".key.pem")
+  serverKeyFile := out + domain + ".key.pem"
+	serverKey, err := os.Create(serverKeyFile)
 	check(err)
-	serverKey.Write(serverPrivateKeyPEM)
-	serverCert, err := os.Create(domain + ".cert.pem")
+	serverKey.Write(serverKeyPEM)
+  
+  serverCertFile := out + domain + ".cert.pem"
+	serverCert, err := os.Create(serverCertFile)
 	check(err)
 	serverCert.Write(serverCertPEM)
+  fmt.Println(serverCertPEM)
 }
 
-func generateClientCerts(deviceName string) {
-	caPrivateKeyPEM, err := ioutil.ReadFile("./ca.key.pem")
+func generateClientCerts(bits int, caCertPath, caKeyPath, deviceName, tenantName string, out string) {
+	caPrivateKeyPEM, err := ioutil.ReadFile(caKeyPath)
 	check(err)
 
 	caKey, _ := pem.Decode([]byte(caPrivateKeyPEM))
 	caPrivateKey, err := x509.ParsePKCS1PrivateKey(caKey.Bytes)
 	check(err)
 
-	caCertPEM, err := ioutil.ReadFile("./ca.cert.pem")
+	caCertPEM, err := ioutil.ReadFile(caCertPath)
 	check(err)
 
 	caCertBytes, _ := pem.Decode([]byte(caCertPEM))
@@ -154,14 +190,15 @@ func generateClientCerts(deviceName string) {
 	check(err)
 
 	// create our RSA private and public key
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	key, err := rsa.GenerateKey(rand.Reader, bits)
 	check(err)
 
 	// set up our CA certificate
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			CommonName:    deviceName,
+			CommonName:   deviceName,
+			Organization: []string{tenantName},
 		},
 		DNSNames:    []string{deviceName},
 		NotBefore:   time.Now(),
@@ -176,15 +213,20 @@ func generateClientCerts(deviceName string) {
 	check(err)
 
 	// pem encode
-	serverCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverCertDER, Type: "CERTIFICATE"})
-	serverPrivateKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
+	clientCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverCertDER, Type: "CERTIFICATE"})
+	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-	serverKey, err := os.Create(deviceName + ".key.pem")
+  clientKeyFile := out + deviceName + ".cert.pem"
+	serverKey, err := os.Create(clientKeyFile)
 	check(err)
-	serverKey.Write(serverPrivateKeyPEM)
-	serverCert, err := os.Create(deviceName + ".cert.pem")
+	serverKey.Write(clientKeyPEM)
+  fmt.Printf("%q\n", clientKeyPEM)
+
+  clientCertFile := out + deviceName + ".cert.pem"
+	serverCert, err := os.Create(clientCertFile)
 	check(err)
-	serverCert.Write(serverCertPEM)
+	serverCert.Write(clientCertPEM)
+  fmt.Printf("%q\n", clientCertPEM)
 }
 
 func check(err error) {
