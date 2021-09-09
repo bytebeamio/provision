@@ -50,7 +50,7 @@ type Client struct {
 }
 
 func (Config) Version() string {
-	return "provision 1.0.0"
+	return "provision 1.0.1"
 }
 
 func main() {
