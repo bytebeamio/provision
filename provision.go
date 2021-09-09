@@ -27,7 +27,7 @@ type Config struct {
 	Ca     *Ca     `arg:"subcommand:ca" help:"generate ca certs [provision ca]"`
 	Server *Server `arg:"subcommand:server" help:"generate server certs [provision server --ca {ca cert} --domain {domain}]"`
 	Client *Client `arg:"subcommand:client" help:"generate client certs [provision client --ca {ca cert path} --cakey {ca key path} --device {device id} --tenant {tenant}]"`
-  Out    string  `arg:"-o" default:"./"`
+	Out    string  `arg:"-o" default:"./"`
 }
 
 type Ca struct {
@@ -107,16 +107,15 @@ func generateCA(bits int, out string) {
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: caCertDER, Type: "CERTIFICATE"})
 	caPrivateKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: caPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-  caKeyFile := out + "ca.key.pem"
-	caKey, err := os.Create(caKeyFile)
+	out = out + "/"
+	caKeyFile, err := os.Create(out + "ca.key.pem")
 	check(err)
-	caKey.Write(caPrivateKeyPEM)
+	caKeyFile.Write(caPrivateKeyPEM)
 
-  caCertFile := out + "ca.cert.pem"
-	caCert, err := os.Create(caCertFile)
+	caCertFile, err := os.Create(out + "ca.cert.pem")
 	check(err)
-	caCert.Write(caCertPEM)
-  fmt.Printf("%q\n", caCertPEM)
+	caCertFile.Write(caCertPEM)
+	fmt.Printf("%q\n", caCertPEM)
 }
 
 func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out string) {
@@ -166,16 +165,15 @@ func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out str
 	serverCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverCertDER, Type: "CERTIFICATE"})
 	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-  serverKeyFile := out + domain + ".key.pem"
-	serverKey, err := os.Create(serverKeyFile)
+	out = out + "/"
+	serverKeyFile, err := os.Create(out + domain + ".key.pem")
 	check(err)
-	serverKey.Write(serverKeyPEM)
-  
-  serverCertFile := out + domain + ".cert.pem"
-	serverCert, err := os.Create(serverCertFile)
+	serverKeyFile.Write(serverKeyPEM)
+
+	serverCertFile, err := os.Create(out + domain + ".cert.pem")
 	check(err)
-	serverCert.Write(serverCertPEM)
-  fmt.Println(serverCertPEM)
+	serverCertFile.Write(serverCertPEM)
+	fmt.Printf("%v\n", string(serverCertPEM))
 }
 
 func generateClientCerts(bits int, caCertPath, caKeyPath, deviceName, tenantName string, out string) {
@@ -220,17 +218,18 @@ func generateClientCerts(bits int, caCertPath, caKeyPath, deviceName, tenantName
 	clientCertPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverCertDER, Type: "CERTIFICATE"})
 	clientKeyPEM := pem.EncodeToMemory(&pem.Block{Bytes: serverPrivateKeyDER, Type: "RSA PRIVATE KEY"})
 
-  clientKeyFile := out + deviceName + ".cert.pem"
-	serverKey, err := os.Create(clientKeyFile)
+	out = out + "/"
+	clientKeyFile, err := os.Create(out + deviceName + ".key.pem")
 	check(err)
-	serverKey.Write(clientKeyPEM)
-  fmt.Printf("%q\n", clientKeyPEM)
+	clientKeyFile.Write(clientKeyPEM)
+	fmt.Printf("%q\n", clientKeyPEM)
 
-  clientCertFile := out + deviceName + ".cert.pem"
-	serverCert, err := os.Create(clientCertFile)
+	clientCertFile, err := os.Create(out + deviceName + ".cert.pem")
 	check(err)
-	serverCert.Write(clientCertPEM)
-  fmt.Printf("%q\n", clientCertPEM)
+
+	println(clientCertFile.Name())
+	clientCertFile.Write(clientCertPEM)
+	fmt.Printf("%q\n", clientCertPEM)
 }
 
 func check(err error) {
