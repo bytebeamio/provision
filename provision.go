@@ -31,14 +31,26 @@ type Config struct {
 }
 
 type Ca struct {
-	Bits int `default:"4096" help:"Number of bits"`
+	Bits     int    `default:"4096" help:"Number of bits"`
+	Org      string `default:"IOT Express Pvt Ltd" help:"Organisation's name under which certificate is authorized"`
+	Ctry     string `default:"India" help:"Organisation's home country"`
+	Prov     string `default:"Karnataka" help:"Organisation's home state"`
+	Loc      string `default:"Bangalore" help:"Organisation's locality"`
+	StrAdd   string `default:"Subbiah Garden" help:"Organisation's street address"`
+	PostCode string `default:"560011" help:"Postal code for address"`
 }
 
 type Server struct {
-	Bits   int    `default:"4096" help:"Number of bits"`
-	Ca     string `arg:"required" help:"ca cert path to sign server certificates"`
-	CaKey  string `arg:"required" help:"ca key path to sign server certificates"`
-	Domain string `arg:"required" help:"domain name"`
+	Bits     int    `default:"4096" help:"Number of bits"`
+	Ca       string `arg:"required" help:"ca cert path to sign server certificates"`
+	CaKey    string `arg:"required" help:"ca key path to sign server certificates"`
+	Domain   string `arg:"required" help:"domain name"`
+	Org      string `default:"IOT Express Pvt Ltd" help:"Organisation's name under which certificate is authorized"`
+	Ctry     string `default:"India" help:"Organisation's home country"`
+	Prov     string `default:"Karnataka" help:"Organisation's home state"`
+	Loc      string `default:"Bangalore" help:"Organisation's locality"`
+	StrAdd   string `default:"Subbiah Garden" help:"Organisation's street address"`
+	PostCode string `default:"560011" help:"Postal code for address"`
 }
 
 type Client struct {
@@ -63,19 +75,21 @@ func main() {
 	}
 
 	if c.Ca != nil {
-		generateCA(c.Ca.Bits, c.Out)
+		c.generateCA()
 	}
 
 	if c.Server != nil {
-		generateServerCerts(c.Server.Bits, c.Server.Ca, c.Server.CaKey, c.Server.Domain, c.Out)
+		c.generateServerCerts()
 	}
 
 	if c.Client != nil {
-		generateClientCerts(c.Client.Bits, c.Client.Ca, c.Client.CaKey, c.Client.Device, c.Client.Tenant, c.Out)
+		c.generateClientCerts()
 	}
 }
 
-func generateCA(bits int, out string) {
+func (c Config) generateCA() {
+	bits := c.Ca.Bits
+	out := c.Out
 	// create our RSA private and public key
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	check(err)
@@ -84,12 +98,12 @@ func generateCA(bits int, out string) {
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
-			Organization:  []string{"IOT Express Pvt Ltd"},
-			Country:       []string{"India"},
-			Province:      []string{"Karnataka"},
-			Locality:      []string{"Bangalore"},
-			StreetAddress: []string{"Subbiah Garden"},
-			PostalCode:    []string{"560011"},
+			Organization:  []string{c.Ca.Org},
+			Country:       []string{c.Ca.Ctry},
+			Province:      []string{c.Ca.Prov},
+			Locality:      []string{c.Ca.Loc},
+			StreetAddress: []string{c.Ca.StrAdd},
+			PostalCode:    []string{c.Ca.PostCode},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
@@ -118,7 +132,13 @@ func generateCA(bits int, out string) {
 	fmt.Printf("%q\n", caCertPEM)
 }
 
-func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out string) {
+func (c Config) generateServerCerts() {
+	bits := c.Server.Bits
+	caCertPath := c.Server.Ca
+	caKeyPath := c.Server.CaKey
+	domain := c.Server.Domain
+	out := c.Out
+
 	caPrivateKeyPEM, err := ioutil.ReadFile(caKeyPath)
 	check(err)
 
@@ -142,12 +162,12 @@ func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out str
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
 			CommonName:    domain,
-			Organization:  []string{"Bytebeam.io"},
-			Country:       []string{"India"},
-			Province:      []string{"Karnataka"},
-			Locality:      []string{"Bangalore"},
-			StreetAddress: []string{"Subbiah Garden"},
-			PostalCode:    []string{"560011"},
+			Organization:  []string{c.Server.Org},
+			Country:       []string{c.Server.Ctry},
+			Province:      []string{c.Server.Prov},
+			Locality:      []string{c.Server.Loc},
+			StreetAddress: []string{c.Server.StrAdd},
+			PostalCode:    []string{c.Server.PostCode},
 		},
 		DNSNames:    []string{domain},
 		NotBefore:   time.Now(),
@@ -176,7 +196,14 @@ func generateServerCerts(bits int, caCertPath, caKeyPath, domain string, out str
 	fmt.Printf("%v\n", string(serverCertPEM))
 }
 
-func generateClientCerts(bits int, caCertPath, caKeyPath, deviceName, tenantName string, out string) {
+func (c Config) generateClientCerts() {
+	bits := c.Client.Bits
+	caCertPath := c.Client.Ca
+	caKeyPath := c.Client.CaKey
+	deviceName := c.Client.Device
+	tenantName := c.Client.Tenant
+	out := c.Out
+
 	caPrivateKeyPEM, err := ioutil.ReadFile(caKeyPath)
 	check(err)
 
